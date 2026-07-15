@@ -1,0 +1,11 @@
+---
+- name: Provision and configure 3x-ui VPN servers
+  hosts: xui_servers
+  become: true
+  gather_facts: true
+  serial: 1   # roll out one server at a time; remove this to go parallel
+
+  roles:
+    - common
+    - docker
+    - xui

@@ -1,0 +1,12 @@
+services:
+  3x-ui:
+    image: {{ xui_image }}
+    container_name: {{ xui_container_name }}
+    hostname: {{ inventory_hostname }}
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - {{ xui_data_dir }}/db/:/etc/x-ui/
+      - {{ xui_data_dir }}/cert/:/root/cert/
+    environment:
+      XRAY_VMESS_AEAD_FORCED: "false"

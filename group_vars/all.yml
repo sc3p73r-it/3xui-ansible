@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# Global settings applied to every 3x-ui server
+# ---------------------------------------------------------------------------
+
+# Docker image for the panel (https://github.com/MHSanaei/3x-ui)
+xui_image: ghcr.io/mhsanaei/3x-ui:latest
+xui_container_name: 3x-ui
+xui_data_dir: /opt/3x-ui
+
+# Panel admin credentials (password comes from the vault file — never commit
+# plaintext passwords). Run: ansible-vault encrypt group_vars/vault.yml
+panel_username: admin
+panel_password: "{{ vault_panel_password }}"
+
+# Per-host panel_port / panel_webpath are defined in inventory/hosts.yml so
+# every server gets a unique admin URL (defense in depth).
+
+# Default Xray inbound provisioned automatically after install
+default_protocol: vless
+default_flow: xtls-rprx-vision
+default_network: tcp
+default_security: reality
+reality_dest: "www.microsoft.com:443"
+reality_server_names:
+  - www.microsoft.com
+

@@ -1,0 +1,6 @@
+# Encrypt this file before committing it anywhere:
+#   ansible-vault encrypt group_vars/vault.yml
+# Edit later with:
+#   ansible-vault edit group_vars/vault.yml
+
+vault_panel_password: "Password123!"

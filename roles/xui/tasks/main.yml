@@ -1,0 +1,125 @@
+---
+- name: Create data directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0750'
+  loop:
+    - "{{ xui_data_dir }}/db"
+    - "{{ xui_data_dir }}/cert"
+
+- name: Deploy docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ xui_data_dir }}/docker-compose.yml"
+    mode: '0640'
+
+- name: Pull 3x-ui image
+  community.docker.docker_image:
+    name: "{{ xui_image }}"
+    source: pull
+
+- name: Start 3x-ui via docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ xui_data_dir }}"
+    state: present
+
+- name: Wait for panel to accept connections
+  wait_for:
+    port: "{{ panel_port }}"
+    timeout: 60
+
+# --- Apply admin credentials, port and base path via the x-ui CLI --------
+- name: Configure panel username, password, port and web base path
+  command: >
+    docker exec {{ xui_container_name }} x-ui setting
+    -username {{ panel_username }}
+    -password {{ panel_password }}
+    -port {{ panel_port }}
+    -webBasePath {{ panel_webpath }}
+  register: xui_setting_result
+  changed_when: true
+
+- name: Restart 3x-ui to apply settings
+  community.docker.docker_container:
+    name: "{{ xui_container_name }}"
+    state: started
+    restart: true
+
+- name: Wait for panel to come back up after restart
+  wait_for:
+    port: "{{ panel_port }}"
+    timeout: 60
+    sleep: 2
+
+# --- Provision a default inbound via the REST API --------------------------
+# This block is a working example (VLESS + TCP + Reality). Adjust protocol,
+# port, or streamSettings to match what you actually want to hand out to
+# clients. Skip it entirely by setting `provision_default_inbound: false`.
+
+- name: Generate an x25519 keypair for Reality (per-server)
+  command: docker exec {{ xui_container_name }} xray x25519
+  register: x25519_out
+  changed_when: false
+  when: provision_default_inbound | default(true)
+
+- name: Parse private/public key from x25519 output
+  set_fact:
+    reality_private_key: "{{ x25519_out.stdout_lines[0].split(':')[1] | trim }}"
+    reality_public_key: "{{ x25519_out.stdout_lines[1].split(':')[1] | trim }}"
+  when: provision_default_inbound | default(true)
+
+- name: Generate a client UUID for this server's default inbound
+  command: python3 -c "import uuid; print(uuid.uuid4())"
+  register: uuid_gen
+  changed_when: false
+  when: provision_default_inbound | default(true)
+
+- name: Log in to panel API and capture session cookie
+  uri:
+    url: "http://127.0.0.1:{{ panel_port }}{{ panel_webpath }}/login"
+    method: POST
+    body_format: json
+    body:
+      username: "{{ panel_username }}"
+      password: "{{ panel_password }}"
+    status_code: 200
+  register: xui_login
+  when: provision_default_inbound | default(true)
+
+- name: Create default VLESS + Reality inbound
+  uri:
+    url: "http://127.0.0.1:{{ panel_port }}{{ panel_webpath }}/panel/api/inbounds/add"
+    method: POST
+    headers:
+      Cookie: "{{ xui_login.set_cookie }}"
+    body_format: json
+    body:
+      up: 0
+      down: 0
+      total: 0
+      remark: "{{ server_location }}-default"
+      enable: true
+      expiryTime: 0
+      listen: ""
+      port: "{{ xray_inbound_port }}"
+      protocol: "{{ default_protocol }}"
+      settings: |
+        {"clients":[{"id":"{{ uuid_gen.stdout }}","email":"{{ server_location }}-client1","flow":"{{ default_flow }}"}],"decryption":"none"}
+      streamSettings: |
+        {"network":"{{ default_network }}","security":"{{ default_security }}","realitySettings":{"show":false,"dest":"{{ reality_dest }}","xver":0,"serverNames":{{ reality_server_names | to_json }},"privateKey":"{{ reality_private_key }}","shortIds":[""]}}
+      sniffing: |
+        {"enabled":true,"destOverride":["http","tls"]}
+    status_code: 200
+  register: inbound_result
+  when: provision_default_inbound | default(true)
+  failed_when: >
+    inbound_result.json is defined and
+    inbound_result.json.success is defined and
+    not inbound_result.json.success and
+    'already' not in (inbound_result.json.msg | default('') | lower)
+
+- name: Show the Reality public key needed for client configs
+  debug:
+    msg: "{{ inventory_hostname }} ({{ domain }}) Reality public key: {{ reality_public_key }}"
+  when: provision_default_inbound | default(true)
