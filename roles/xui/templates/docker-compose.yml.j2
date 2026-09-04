@@ -10,3 +10,5 @@ services:
       - {{ xui_data_dir }}/cert/:/root/cert/
     environment:
       XRAY_VMESS_AEAD_FORCED: "false"
+      XUI_PORT: "{{ panel_port }}"
+      XUI_INIT_WEB_BASE_PATH: "{{ panel_webpath }}"
