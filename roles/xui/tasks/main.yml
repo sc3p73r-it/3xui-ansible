@@ -31,14 +31,48 @@
 
 # --- Apply admin credentials, port and base path via the x-ui CLI --------
 - name: Configure panel username, password, port and web base path
-  command: >
-    docker exec {{ xui_container_name }} x-ui setting
-    -username {{ panel_username }}
-    -password {{ panel_password }}
-    -port {{ panel_port }}
-    -webBasePath {{ panel_webpath }}
+  command:
+    argv:
+      - docker
+      - exec
+      - "{{ xui_container_name }}"
+      - x-ui
+      - setting
+      - -username
+      - "{{ panel_username }}"
+      - -password
+      - "{{ panel_password }}"
+      - -port
+      - "{{ panel_port }}"
+      - -webBasePath
+      - "{{ panel_webpath }}"
   register: xui_setting_result
   changed_when: true
+  no_log: true
+
+- name: Read back panel settings
+  command:
+    argv:
+      - docker
+      - exec
+      - "{{ xui_container_name }}"
+      - x-ui
+      - setting
+      - -show
+      - "true"
+  register: xui_settings
+  changed_when: false
+  no_log: true
+
+- name: Verify customized panel settings
+  assert:
+    that:
+      - "('port: ' ~ (panel_port | string)) in xui_settings.stdout"
+      - "('webBasePath: ' ~ panel_webpath) in xui_settings.stdout"
+    fail_msg: >-
+      3x-ui did not save the requested panel port or web base path.
+      CLI output: {{ xui_settings.stdout | default('') }}
+  no_log: true
 
 - name: Restart 3x-ui to apply settings
   community.docker.docker_container:

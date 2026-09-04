@@ -44,12 +44,14 @@ order, one host at a time (`serial: 1`):
 3. **`xui`** — the core of the project:
    - Creates `{{ xui_data_dir }}/db` and `/cert` on the host.
    - Templates a `docker-compose.yml` (host networking, bind-mounted
-     `db/` and `cert/` volumes) and brings the container up.
+     `db/` and `cert/` volumes) with `XUI_PORT` and
+     `XUI_INIT_WEB_BASE_PATH`, so the panel starts on the configured port
+     and base path instead of exposing the image defaults.
    - Waits for the panel port, then uses the `x-ui` CLI **inside the
      container** to set the admin username, password, panel port, and
-     web base path (`docker exec ... x-ui setting -username ... -password
-     ... -port ... -webBasePath ...`), then restarts the container so the
-     new settings take effect.
+     web base path. The role reads the settings back and fails if the
+     requested port or path was not saved, then restarts the container so
+     the settings take effect.
    - Optionally (`provision_default_inbound`, default `true`):
      generates a per-server x25519 keypair via `xray x25519`, generates a
      client UUID, logs into the panel's REST API to grab a session
@@ -64,6 +66,7 @@ order, one host at a time (`serial: 1`):
 | `ansible_host`, `domain`, `server_location`, `panel_port`, `panel_webpath`, `xray_inbound_port` | `inventory/hosts.yml` (per host) | Per-server identity; **`panel_webpath` must be unique per host** |
 | `xui_image`, `xui_container_name`, `xui_data_dir` | `group_vars/all.yml` | Container image/name and host data directory |
 | `panel_username`, `panel_password` (→ `vault_panel_password`) | `group_vars/all.yml` / `group_vars/vault.yml` | Panel admin credentials |
+| `XUI_PORT`, `XUI_INIT_WEB_BASE_PATH` | Generated in the x-ui compose template | Starts the panel with the configured port and base path |
 | `default_protocol`, `default_flow`, `default_network`, `default_security`, `reality_dest`, `reality_server_names` | `group_vars/all.yml` | Default inbound shape when auto-provisioning |
 | `server_timezone` | **not set anywhere in this repo** | Passed to `community.general.timezone` — see Known issues below |
 | `provision_default_inbound` | extra-var only (defaults to `true` in the role) | Set to `false` to skip API provisioning |
